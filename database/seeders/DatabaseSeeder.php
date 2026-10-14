@@ -17,9 +17,15 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        User::firstOrCreate(
+            ['email' => 'admin@agosense.com'],
+            [
+                'name' => 'Admin Official',
+                'password' => bcrypt('Admin123'),
+                'role' => 'admin',
+            ]
+        );
+
+        $this->call(DrainageSeeder::class);
     }
 }

@@ -14,11 +14,12 @@ return new class extends Migration
        Schema::create('stations', function (Blueprint $table) {
     $table->id();
     $table->string('station_code')->unique(); // e.g., CAL-DRN-01
-    $table->string('location_name');          // e.g., Pilot Drainage Channel, Calauan
+    $table->string('location_name');          // e.g., Main Municipal Channel, Calauan
     $table->decimal('latitude', 10, 7);
     $table->decimal('longitude', 10, 7);
     $table->enum('status', ['active', 'maintenance', 'offline'])->default('active');
     $table->timestamps();
+    $table->string('role')->default('viewer'); // options: 'admin', 'viewer'
 });
     }
 

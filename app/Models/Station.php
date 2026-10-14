@@ -12,7 +12,8 @@ class Station extends Model
         'location_name', 
         'latitude', 
         'longitude', 
-        'status'
+        'status',
+        'warning_threshold_cm',
     ];
 
     /**
@@ -29,5 +30,10 @@ class Station extends Model
     public function alerts(): HasMany
     {
         return $this->hasMany(Alert::class);
+    }
+
+    public function fieldReports(): HasMany
+    {
+        return $this->hasMany(FieldReport::class);
     }
 }
