@@ -20,6 +20,7 @@ Route::post('/v1/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/v1/dashboard', [DashboardController::class, 'index']);
     Route::post('/v1/logout', [AuthController::class, 'logout']);
+    Route::get('/v1/records/export', [SensorRecordsController::class, 'export']);
     Route::get('/v1/records', [SensorRecordsController::class, 'index']);
     Route::get('/v1/reports', [FieldReportController::class, 'index']);
     Route::post('/v1/reports', [FieldReportController::class, 'store']);

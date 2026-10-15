@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\FieldReport;
+use App\Http\Requests\StoreFieldReportRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -23,13 +24,9 @@ class FieldReportController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreFieldReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'subject' => ['required', 'string', 'max:160'],
-            'message' => ['required', 'string', 'min:10', 'max:5000'],
-            'station_id' => ['required', 'integer', 'exists:stations,id'],
-        ]);
+        $validated = $request->validated();
 
         $report = FieldReport::create([
             ...$validated,
