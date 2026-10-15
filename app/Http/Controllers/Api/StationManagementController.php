@@ -52,6 +52,20 @@ class StationManagementController extends Controller
         ]);
     }
 
+    public function updateThreshold(Request $request, Station $station): JsonResponse
+    {
+        $validated = $request->validate([
+            'warning_threshold_cm' => ['required', 'numeric', 'min:1', 'max:10000'],
+        ]);
+
+        $station->update(['warning_threshold_cm' => $validated['warning_threshold_cm']]);
+
+        return response()->json([
+            'message' => "Alert threshold for {$station->station_code} was updated.",
+            'station' => $station->fresh(),
+        ]);
+    }
+
     private function validatedStation(Request $request, ?Station $station = null): array
     {
         $required = $station ? 'sometimes' : 'required';

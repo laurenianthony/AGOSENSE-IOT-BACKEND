@@ -97,6 +97,11 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Supabase's transaction-mode pooler can move requests between server
+            // connections, which invalidates PDO's named prepared statements.
+            'options' => extension_loaded('pdo_pgsql') ? [
+                \PDO::ATTR_EMULATE_PREPARES => env('DB_EMULATE_PREPARES', true),
+            ] : [],
         ],
 
         'sqlsrv' => [

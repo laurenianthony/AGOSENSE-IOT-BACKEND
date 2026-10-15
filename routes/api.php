@@ -20,6 +20,7 @@ Route::post('/v1/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/v1/dashboard', [DashboardController::class, 'index']);
     Route::post('/v1/logout', [AuthController::class, 'logout']);
+    Route::post('/v1/account/password', [AuthController::class, 'changePassword']);
     Route::get('/v1/records/export', [SensorRecordsController::class, 'export']);
     Route::get('/v1/records', [SensorRecordsController::class, 'index']);
     Route::get('/v1/reports', [FieldReportController::class, 'index']);
@@ -30,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/v1/admin/stations', [StationManagementController::class, 'index']);
         Route::post('/v1/admin/stations', [StationManagementController::class, 'store']);
         Route::patch('/v1/admin/stations/{station}', [StationManagementController::class, 'update']);
+        Route::patch('/v1/admin/stations/{station}/threshold', [StationManagementController::class, 'updateThreshold']);
         Route::delete('/v1/admin/stations/{station}', [StationManagementController::class, 'destroy']);
         Route::patch('/v1/admin/reports/{fieldReport}/status', [FieldReportController::class, 'updateStatus']);
     });
