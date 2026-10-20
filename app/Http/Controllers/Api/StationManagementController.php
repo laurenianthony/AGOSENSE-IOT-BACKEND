@@ -15,6 +15,7 @@ class StationManagementController extends Controller
     {
         $stations = Station::with(['sensorReadings' => fn ($query) => $query->latest('recorded_at')->limit(1)])
             ->orderBy('station_code')
+            ->orderBy('id')
             ->get();
 
         return response()->json(['status' => 'success', 'stations' => $stations]);

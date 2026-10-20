@@ -10,43 +10,53 @@ class DrainageSeeder extends Seeder
 {
     public function run(): void
     {
-        // Define 3 distinct stations with different operational scenarios for defense day
+        // Define 3 distinct stations along actual water channels in Calauan, Laguna
         $stationsData = [
             [
                 'code' => 'CAL-DRN-01',
                 'name' => 'Main Municipal Channel, Calauan, Laguna',
+                'lat' => 14.1488,  // Calauan River channel near Poblacion
+                'lng' => 121.3145,
                 'status' => 'active',
-                'scenario' => 'normal' // Low water, steady flow
+                'scenario' => 'normal'
             ],
             [
                 'code' => 'CAL-DRN-02',
                 'name' => 'Sector Drainage Node 2, Calauan, Laguna',
+                'lat' => 14.1436,  // Prinza waterway canal junction
+                'lng' => 121.3192,
                 'status' => 'active',
-                'scenario' => 'heavy_rain' // High water, high flow (Safe/Elevated)
+                'scenario' => 'heavy_rain'
             ],
             [
                 'code' => 'CAL-DRN-03',
                 'name' => 'Sector Drainage Node 3, Calauan, Laguna',
+                'lat' => 14.1382,  // Southern tributary stream channel
+                'lng' => 121.3128,
                 'status' => 'active',
-                'scenario' => 'blockage' // High water, near-zero flow (Critical Blockage)
+                'scenario' => 'blockage'
             ],
         ];
 
         foreach ($stationsData as $data) {
-            $station = Station::updateOrCreate(
-                ['station_code' => $data['code']],
-                [
-                    'location_name' => $data['name'],
-                    'latitude' => 14.1417 + (intval(substr($data['code'], -2)) * 0.001),
-                    'longitude' => 121.3167 + (intval(substr($data['code'], -2)) * 0.001),
-                    'status' => $data['status'],
-                    'warning_threshold_cm' => 60,
-                ]
-            );
+            $station = Station::firstOrNew([
+                'station_code' => $data['code']
+            ]);
 
-            // Clear old readings and seed specific scenario data
-            $station->sensorReadings()->delete();
-            $this->seedScenarioReadings($station, $data['scenario']);
+            $station->fill([
+                'station_code' => $data['code'],
+                'location_name' => $data['name'],
+                'latitude' => $data['lat'],
+                'longitude' => $data['lng'],
+                'status' => $data['status'],
+                'warning_threshold_cm' => 60,
+            ]);
+            $station->save();
+
+            // Seed sample history only when the station has no readings
+            if (! $station->sensorReadings()->exists()) {
+                $this->seedScenarioReadings($station, $data['scenario']);
+            }
         }
     }
 
@@ -56,20 +66,16 @@ class DrainageSeeder extends Seeder
 
         for ($hoursAgo = 20; $hoursAgo >= 0; $hoursAgo--) {
             if ($scenario === 'normal') {
-                // Scenario 1: Normal operating conditions
-                $waterLevel = random_int(20, 45); // 20cm - 45cm (Below 60cm threshold)
-                $flowRate = random_int(15, 30) / 10; // 1.5 - 3.0 L/min
+                $waterLevel = random_int(20, 45);
+                $flowRate = random_int(15, 30) / 10;
             } elseif ($scenario === 'heavy_rain') {
-                // Scenario 2: Heavy rainfall, rushing water (High volume, but flowing smoothly)
-                $waterLevel = random_int(65, 80); // Above 60cm threshold
-                $flowRate = random_int(35, 55) / 10; // 3.5 - 5.5 L/min (High flow rate)
+                $waterLevel = random_int(65, 80);
+                $flowRate = random_int(35, 55) / 10;
             } else {
-                // Scenario 3: Critical blockage / trash clog (High water backing up, flow stops)
-                $waterLevel = random_int(82, 95); // High water level
-                $flowRate = random_int(1, 4) / 10; // 0.1 - 0.4 L/min (Near-zero flow)
+                $waterLevel = random_int(82, 95); 
+                $flowRate = random_int(1, 4) / 10;
             }
 
-            // Add slight natural fluctuation to recent hours
             if ($hoursAgo <= 2) {
                 $waterLevel += random_int(-2, 2);
             }

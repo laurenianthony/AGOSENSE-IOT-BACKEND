@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Station;
-use App\Models\Alert;
 use Illuminate\Http\JsonResponse;
 use App\Support\DrainageStatusEvaluator;
 
@@ -14,7 +13,7 @@ class DashboardController extends Controller
     {
         $stations = Station::with(['sensorReadings' => function ($query) {
             $query->latest('recorded_at')->limit(1);
-        }])->get();
+        }])->orderBy('station_code')->orderBy('id')->get();
 
         $stations->each(function (Station $station) {
             $reading = $station->sensorReadings->first();
