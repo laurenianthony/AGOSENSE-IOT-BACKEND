@@ -15,7 +15,9 @@ class AuthController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/'],
+        ], [
+            'password.regex' => 'Use at least 8 characters, including a lowercase letter, an uppercase letter, a number, and a special character (!@#$%^&*).',
         ]);
 
         $user = User::create([
@@ -73,7 +75,9 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password'],
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password', 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/'],
+        ], [
+            'password.regex' => 'Use at least 8 characters, including a lowercase letter, an uppercase letter, a number, and a special character (!@#$%^&*).',
         ]);
 
         $user = $request->user();
