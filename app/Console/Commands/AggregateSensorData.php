@@ -8,46 +8,38 @@ use Illuminate\Support\Facades\DB;
 
 class AggregateSensorData extends Command
 {
-    protected $signature = 'sensors:aggregate {--scope=all : all, hourly, or daily}';
+    protected $signature = 'sensors:aggregate {--scope=daily : daily summaries only}';
 
-    protected $description = 'Build hourly and daily sensor summaries for historical views.';
+    protected $description = 'Build compact daily sensor summaries for historical views.';
 
     public function handle(): int
     {
         $scope = $this->option('scope');
 
-        if (! in_array($scope, ['all', 'hourly', 'daily'], true)) {
-            $this->error('Scope must be all, hourly, or daily.');
+        if ($scope !== 'daily') {
+            $this->error('Only daily summary aggregation is supported.');
 
             return self::FAILURE;
         }
 
         $now = CarbonImmutable::now();
 
-        if (in_array($scope, ['all', 'hourly'], true)) {
-            $lastHourlyBucket = DB::table('hourly_sensor_summaries')->max('bucket_start');
-            $hourlyAfter = $lastHourlyBucket
-                ? CarbonImmutable::parse($lastHourlyBucket, 'UTC')->startOfHour()
-                : $now->subDays(30);
-            $this->aggregate('hourly_sensor_summaries', 'hour', $now->startOfHour(), $hourlyAfter);
-        }
-
-        if (in_array($scope, ['all', 'daily'], true)) {
-            $lastDailyBucket = DB::table('daily_sensor_summaries')->max('bucket_start');
-            $dailyAfter = $lastDailyBucket
-                ? CarbonImmutable::parse($lastDailyBucket, 'UTC')->startOfDay()
-                : null;
-            $this->aggregate('daily_sensor_summaries', 'day', $now->startOfDay(), $dailyAfter);
-        }
+        $lastDailyBucket = DB::table('daily_sensor_summaries')->max('bucket_start');
+        $dailyAfter = $lastDailyBucket
+            ? CarbonImmutable::parse($lastDailyBucket, 'UTC')->startOfDay()
+            : null;
+        // Include the current day so incoming readings appear without waiting until tomorrow.
+        $this->aggregateDaily($now->addDay()->startOfDay(), $dailyAfter);
 
         $this->info('Sensor summaries are up to date.');
 
         return self::SUCCESS;
     }
 
-    private function aggregate(string $summaryTable, string $grain, CarbonImmutable $before, ?CarbonImmutable $after = null): void
+    private function aggregateDaily(CarbonImmutable $before, ?CarbonImmutable $after = null): void
     {
-        $bucketExpression = "date_trunc('{$grain}', sensor_readings.recorded_at)";
+        $summaryTable = 'daily_sensor_summaries';
+        $bucketExpression = "date_trunc('day', sensor_readings.recorded_at)";
         $query = DB::table('sensor_readings')
             ->join('stations', 'stations.id', '=', 'sensor_readings.station_id')
             ->selectRaw("sensor_readings.station_id, {$bucketExpression} as bucket_start")

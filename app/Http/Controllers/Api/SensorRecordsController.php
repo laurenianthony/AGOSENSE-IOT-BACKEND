@@ -3,15 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\SensorReading;
-use App\Support\DrainageStatusEvaluator;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SensorRecordsController extends Controller
@@ -23,130 +19,51 @@ class SensorRecordsController extends Controller
         $filters = $this->validatedFilters($request);
         $perPage = (int) ($filters['per_page'] ?? 25);
         $page = (int) ($filters['page'] ?? 1);
-        $period = $filters['period'] ?? 'raw';
-
-        if (($filters['period'] ?? 'raw') === 'raw') {
-            $query = SensorReading::query()
-                ->with('station:id,station_code,location_name,warning_threshold_cm');
-
-            $this->applyRawFilters($query, $filters);
-            $paginator = $query->orderByDesc('recorded_at')->orderByDesc('id')->paginate($perPage, ['*'], 'page', $page);
-            $items = collect($paginator->items())->map(function (SensorReading $record): array {
-                $condition = DrainageStatusEvaluator::evaluate(
-                    $record->water_level_cm,
-                    $record->flow_rate,
-                    $record->station?->warning_threshold_cm ?? 60,
-                );
-
-                return [...$record->toArray(), 'drainage_condition' => $condition];
-            })->all();
-        } elseif ($period === 'daily' && (! Schema::hasTable('daily_sensor_summaries') || ! Schema::hasColumns('daily_sensor_summaries', [
-            'id', 'station_id', 'bucket_start', 'water_min_cm', 'water_max_cm', 'water_avg_cm',
-            'flow_min_lpm', 'flow_max_lpm', 'flow_avg_lpm', 'readings_count', 'anomaly_count', 'blockage_count',
-        ]))) {
-            // Some hosted databases may not have run the optional rollup migration yet.
-            // Build daily buckets directly from raw readings using PostgreSQL date_trunc.
-            $bucketExpression = "DATE_TRUNC('day', readings.recorded_at)";
-            $query = DB::table('sensor_readings as readings')
-                ->join('stations', 'stations.id', '=', 'readings.station_id')
-                ->selectRaw("readings.station_id, stations.station_code, stations.location_name, stations.warning_threshold_cm, {$bucketExpression} as bucket_start")
-                ->selectRaw('MIN(readings.water_level_cm) as water_min_cm, MAX(readings.water_level_cm) as water_max_cm, AVG(readings.water_level_cm) as water_avg_cm')
-                ->selectRaw('MIN(readings.flow_rate) as flow_min_lpm, MAX(readings.flow_rate) as flow_max_lpm, AVG(readings.flow_rate) as flow_avg_lpm')
-                ->selectRaw('COUNT(readings.id) as readings_count')
-                ->selectRaw('SUM(CASE WHEN readings.water_level_cm >= COALESCE(stations.warning_threshold_cm, 60) THEN 1 ELSE 0 END) as anomaly_count')
-                ->selectRaw('SUM(CASE WHEN readings.water_level_cm >= COALESCE(stations.warning_threshold_cm, 60) AND readings.flow_rate IS NOT NULL AND readings.flow_rate < 1.0 THEN 1 ELSE 0 END) as blockage_count')
-                ->groupBy('readings.station_id', 'stations.station_code', 'stations.location_name', 'stations.warning_threshold_cm')
-                ->groupByRaw($bucketExpression);
-
-            if (! empty($filters['station_id'])) {
-                $query->where('readings.station_id', $filters['station_id']);
-            }
-            if (! empty($filters['date_from'])) {
-                $query->where('readings.recorded_at', '>=', $this->localDateStart($filters['date_from']));
-            }
-            if (! empty($filters['date_to'])) {
-                $query->where('readings.recorded_at', '<=', $this->localDateEnd($filters['date_to']));
-            }
-            if (filter_var($filters['anomalies'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-                $query->havingRaw('SUM(CASE WHEN readings.water_level_cm >= COALESCE(stations.warning_threshold_cm, 60) THEN 1 ELSE 0 END) > 0');
-            }
-
-            $paginator = $query->orderByDesc('bucket_start')->orderBy('readings.station_id')->paginate($perPage, ['*'], 'page', $page);
-            $items = collect($paginator->items())->map(function (object $row): array {
-                $blocked = (int) $row->blockage_count > 0;
-                $anomaly = (int) $row->anomaly_count > 0;
-                $condition = $blocked
-                    ? ['code' => 'blockage_detected', 'label' => 'Blockage Detected']
-                    : ($anomaly
-                        ? ['code' => 'elevated_water', 'label' => 'Elevated Water']
-                        : ['code' => 'normal', 'label' => 'Clear / Safe']);
-
-                return [
-                    'id' => $row->station_id . '-' . CarbonImmutable::parse($row->bucket_start)->format('Ymd'),
-                    'station_id' => $row->station_id,
-                    'station_code' => $row->station_code,
-                    'recorded_at' => $row->bucket_start,
-                    'water_level_cm' => $row->water_avg_cm,
-                    'flow_rate' => $row->flow_avg_lpm,
-                    'water_min_cm' => $row->water_min_cm,
-                    'water_max_cm' => $row->water_max_cm,
-                    'flow_min_lpm' => $row->flow_min_lpm,
-                    'flow_max_lpm' => $row->flow_max_lpm,
-                    'readings_count' => (int) $row->readings_count,
-                    'anomaly_count' => (int) $row->anomaly_count,
-                    'blockage_count' => (int) $row->blockage_count,
-                    'period' => 'daily',
-                    'station' => [
-                        'id' => $row->station_id,
-                        'station_code' => $row->station_code,
-                        'location_name' => $row->location_name,
-                        'warning_threshold_cm' => $row->warning_threshold_cm,
-                    ],
-                    'drainage_condition' => $condition,
-                ];
-            })->all();
-        } else {
-            $table = $period === 'hourly' ? 'hourly_sensor_summaries' : 'daily_sensor_summaries';
-            $query = DB::table("{$table} as summary")
-                ->join('stations', 'stations.id', '=', 'summary.station_id')
-                ->select('summary.*', 'stations.station_code', 'stations.location_name', 'stations.warning_threshold_cm');
-
-            $this->applySummaryFilters($query, $filters);
-            $paginator = $query->orderByDesc('bucket_start')->orderByDesc('summary.id')->paginate($perPage, ['*'], 'page', $page);
-            $items = collect($paginator->items())->map(function (object $row) use ($filters): array {
-                $blocked = (int) $row->blockage_count > 0;
-                $anomaly = (int) $row->anomaly_count > 0;
-                $condition = $blocked
-                    ? ['code' => 'blockage_detected', 'label' => 'Blockage Detected']
-                    : ($anomaly
-                        ? ['code' => 'elevated_water', 'label' => 'Elevated Water']
-                        : ['code' => 'normal', 'label' => 'Clear / Safe']);
-
-                return [
-                    'id' => $row->id,
-                    'station_id' => $row->station_id,
-                    'station_code' => $row->station_code,
-                    'recorded_at' => $row->bucket_start,
-                    'water_level_cm' => $row->water_avg_cm,
-                    'flow_rate' => $row->flow_avg_lpm,
-                    'water_min_cm' => $row->water_min_cm,
-                    'water_max_cm' => $row->water_max_cm,
-                    'flow_min_lpm' => $row->flow_min_lpm,
-                    'flow_max_lpm' => $row->flow_max_lpm,
-                    'readings_count' => (int) $row->readings_count,
-                    'anomaly_count' => (int) $row->anomaly_count,
-                    'blockage_count' => (int) $row->blockage_count,
-                    'period' => $filters['period'],
-                    'station' => [
-                        'id' => $row->station_id,
-                        'station_code' => $row->station_code,
-                        'location_name' => $row->location_name,
-                        'warning_threshold_cm' => $row->warning_threshold_cm,
-                    ],
-                    'drainage_condition' => $condition,
-                ];
-            })->all();
+        if (! DB::getSchemaBuilder()->hasTable('daily_sensor_summaries')) {
+            return response()->json([
+                'message' => 'Daily summaries are not initialized. Run the database migrations and the sensors:aggregate --scope=daily command.',
+            ], 503);
         }
+
+        $query = DB::table('daily_sensor_summaries as summary')
+            ->join('stations', 'stations.id', '=', 'summary.station_id')
+            ->select('summary.*', 'stations.station_code', 'stations.location_name', 'stations.warning_threshold_cm');
+
+        $this->applySummaryFilters($query, $filters);
+        $paginator = $query->orderByDesc('bucket_start')->orderByDesc('summary.id')->paginate($perPage, ['*'], 'page', $page);
+        $items = collect($paginator->items())->map(function (object $row): array {
+            $blocked = (int) $row->blockage_count > 0;
+            $anomaly = (int) $row->anomaly_count > 0;
+            $condition = $blocked
+                ? ['code' => 'blockage_detected', 'label' => 'Blockage Detected']
+                : ($anomaly
+                    ? ['code' => 'elevated_water', 'label' => 'Elevated Water']
+                    : ['code' => 'normal', 'label' => 'Clear / Safe']);
+
+            return [
+                'id' => $row->id,
+                'station_id' => $row->station_id,
+                'station_code' => $row->station_code,
+                'recorded_at' => $row->bucket_start,
+                'water_level_cm' => $row->water_avg_cm,
+                'flow_rate' => $row->flow_avg_lpm,
+                'water_min_cm' => $row->water_min_cm,
+                'water_max_cm' => $row->water_max_cm,
+                'flow_min_lpm' => $row->flow_min_lpm,
+                'flow_max_lpm' => $row->flow_max_lpm,
+                'readings_count' => (int) $row->readings_count,
+                'anomaly_count' => (int) $row->anomaly_count,
+                'blockage_count' => (int) $row->blockage_count,
+                'period' => 'daily',
+                'station' => [
+                    'id' => $row->station_id,
+                    'station_code' => $row->station_code,
+                    'location_name' => $row->location_name,
+                    'warning_threshold_cm' => $row->warning_threshold_cm,
+                ],
+                'drainage_condition' => $condition,
+            ];
+        })->all();
 
         return response()->json([
             'status' => 'success',
@@ -165,6 +82,11 @@ class SensorRecordsController extends Controller
     public function export(Request $request): StreamedResponse|JsonResponse
     {
         $filters = $this->validatedFilters($request, true);
+        if (! DB::getSchemaBuilder()->hasTable('daily_sensor_summaries')) {
+            return response()->json([
+                'message' => 'Daily summaries are not initialized. Run the database migrations and the sensors:aggregate --scope=daily command.',
+            ], 503);
+        }
         $format = $filters['format'];
         $query = $this->exportQuery($filters);
         $filename = 'agosense-' . $filters['period'] . '-records-' . now()->format('Ymd-His');
@@ -202,7 +124,7 @@ class SensorRecordsController extends Controller
             'station_id' => ['sometimes', 'nullable', 'integer', 'exists:stations,id'],
             'date_from' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'date_to' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
-            'period' => ['sometimes', 'in:raw,hourly,daily'],
+            'period' => ['sometimes', 'in:daily'],
             'anomalies' => ['sometimes', 'boolean'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
@@ -212,26 +134,10 @@ class SensorRecordsController extends Controller
             $rules['format'] = ['required', 'in:csv,pdf'];
         }
 
-        return $request->validate($rules);
-    }
+        $validated = $request->validate($rules);
+        $validated['period'] = 'daily';
 
-    private function applyRawFilters(EloquentBuilder $query, array $filters): void
-    {
-        if (! empty($filters['station_id'])) {
-            $query->where('station_id', $filters['station_id']);
-        }
-
-        if (! empty($filters['date_from'])) {
-            $query->where('recorded_at', '>=', $this->localDateStart($filters['date_from']));
-        }
-
-        if (! empty($filters['date_to'])) {
-            $query->where('recorded_at', '<=', $this->localDateEnd($filters['date_to']));
-        }
-
-        if (filter_var($filters['anomalies'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-            $query->whereHas('station', fn ($station) => $station->whereColumn('sensor_readings.water_level_cm', '>=', 'stations.warning_threshold_cm'));
-        }
+        return $validated;
     }
 
     private function applySummaryFilters(Builder $query, array $filters): void
@@ -265,25 +171,7 @@ class SensorRecordsController extends Controller
 
     private function exportQuery(array $filters): Builder
     {
-        $period = $filters['period'] ?? 'raw';
-
-        if ($period === 'raw') {
-            $query = DB::table('sensor_readings as readings')
-                ->join('stations', 'stations.id', '=', 'readings.station_id')
-                ->select('readings.id as row_id', 'readings.recorded_at', 'stations.station_code', 'readings.water_level_cm', 'readings.flow_rate')
-                ->selectRaw("CASE WHEN readings.water_level_cm < COALESCE(stations.warning_threshold_cm, 60) THEN 'Clear / Safe' WHEN readings.flow_rate IS NULL THEN 'Awaiting flow data' WHEN readings.flow_rate < 1.0 THEN 'Blockage Detected' ELSE 'Elevated Water' END as status");
-
-            if (filter_var($filters['anomalies'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-                $query->whereRaw('readings.water_level_cm >= COALESCE(stations.warning_threshold_cm, 60)');
-            }
-
-            $this->applyExportCommonFilters($query, $filters, 'readings.station_id', 'readings.recorded_at');
-
-            return $query;
-        }
-
-        $table = $period === 'hourly' ? 'hourly_sensor_summaries' : 'daily_sensor_summaries';
-        $query = DB::table("{$table} as summary")
+        $query = DB::table('daily_sensor_summaries as summary')
             ->join('stations', 'stations.id', '=', 'summary.station_id')
             ->select('summary.id as row_id', 'summary.bucket_start as recorded_at', 'stations.station_code', 'summary.water_avg_cm as water_level_cm', 'summary.flow_avg_lpm as flow_rate')
             ->selectRaw("CASE WHEN summary.blockage_count > 0 THEN 'Blockage Detected' WHEN summary.anomaly_count > 0 THEN 'Elevated Water' ELSE 'Clear / Safe' END as status");

@@ -1,10 +1,9 @@
 # Sensor data retention plan
 
-AGOSENSE stores recent raw samples in `sensor_readings` and scheduled rollups in
-`hourly_sensor_summaries` and `daily_sensor_summaries`. The `(station_id,
-recorded_at)` index supports station history filters and rollup scans. Hourly
-summaries are maintained for recent history; daily summaries preserve long-term
-trends.
+AGOSENSE stores raw samples in `sensor_readings` for live monitoring and
+hardware processing. Historical records use the compact
+`daily_sensor_summaries` rollup. The `(station_id, recorded_at)` index supports
+daily aggregation and station history filters.
 
 ## Safe archival path for data older than 30 days
 
