@@ -25,15 +25,12 @@ class AuthController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'viewer', // Default role for new signups
+            'is_approved' => false,
         ]);
 
-        $token = $user->createToken('auth_token')->plainTextToken;
-
         return response()->json([
-            'message' => 'Registration successful',
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-            'user' => $user
+            'message' => 'Registration submitted. Your account is pending admin approval.',
+            'user' => $user,
         ], 201);
     }
 
@@ -50,6 +47,12 @@ class AuthController extends Controller
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
+        }
+
+        if (! $user->is_approved) {
+            return response()->json([
+                'message' => 'Your account is pending admin approval.',
+            ], 403);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;

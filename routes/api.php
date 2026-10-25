@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\SensorRecordsController;
 use App\Http\Controllers\Api\FieldReportController;
 use App\Http\Controllers\Api\StationManagementController;
+use App\Http\Controllers\Api\AdminController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -28,6 +29,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Role-protected routes for your capstone defense requirements
     Route::middleware('role:admin')->group(function () {
+        Route::get('/admin/pending-users', [AdminController::class, 'pendingUsers']);
+        Route::post('/admin/approve-user/{id}', [AdminController::class, 'approveUser']);
         Route::get('/v1/admin/stations', [StationManagementController::class, 'index']);
         Route::post('/v1/admin/stations', [StationManagementController::class, 'store']);
         Route::patch('/v1/admin/stations/{station}', [StationManagementController::class, 'update']);
