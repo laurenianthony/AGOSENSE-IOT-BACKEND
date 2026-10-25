@@ -31,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin')->group(function () {
         Route::get('/admin/pending-users', [AdminController::class, 'pendingUsers']);
         Route::post('/admin/approve-user/{id}', [AdminController::class, 'approveUser']);
+        Route::delete('/admin/reject-user/{id}', [AdminController::class, 'rejectUser']);
         Route::get('/v1/admin/stations', [StationManagementController::class, 'index']);
         Route::post('/v1/admin/stations', [StationManagementController::class, 'store']);
         Route::patch('/v1/admin/stations/{station}', [StationManagementController::class, 'update']);

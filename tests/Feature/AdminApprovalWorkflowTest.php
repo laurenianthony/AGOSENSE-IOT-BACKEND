@@ -109,4 +109,41 @@ class AdminApprovalWorkflowTest extends TestCase
             ->postJson('/api/admin/approve-user/999999')
             ->assertNotFound();
     }
+
+    public function test_admin_can_reject_and_delete_a_pending_user(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'is_approved' => true]);
+        $pendingUser = User::factory()->create(['is_approved' => false]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->deleteJson("/api/admin/reject-user/{$pendingUser->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'User registration rejected and deleted.');
+
+        $this->assertDatabaseMissing('users', ['id' => $pendingUser->id]);
+    }
+
+    public function test_non_admin_cannot_reject_a_pending_user(): void
+    {
+        $viewer = User::factory()->create(['role' => 'viewer', 'is_approved' => true]);
+        $pendingUser = User::factory()->create(['is_approved' => false]);
+
+        $this->actingAs($viewer, 'sanctum')
+            ->deleteJson("/api/admin/reject-user/{$pendingUser->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('users', [
+            'id' => $pendingUser->id,
+            'is_approved' => false,
+        ]);
+    }
+
+    public function test_rejecting_a_missing_user_returns_not_found(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'is_approved' => true]);
+
+        $this->actingAs($admin, 'sanctum')
+            ->deleteJson('/api/admin/reject-user/999999')
+            ->assertNotFound();
+    }
 }

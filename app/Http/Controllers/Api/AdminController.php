@@ -28,4 +28,14 @@ class AdminController extends Controller
             'user' => $user->only(['id', 'name', 'email', 'is_approved']),
         ]);
     }
+
+    public function rejectUser(int $id): JsonResponse
+    {
+        $user = User::query()->findOrFail($id);
+        $user->delete();
+
+        return response()->json([
+            'message' => 'User registration rejected and deleted.',
+        ]);
+    }
 }
