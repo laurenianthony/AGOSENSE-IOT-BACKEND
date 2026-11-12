@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\SensorRecordsController;
 use App\Http\Controllers\Api\FieldReportController;
 use App\Http\Controllers\Api\StationManagementController;
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\SensorDataController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -16,6 +17,8 @@ Route::get('/user', function (Request $request) {
 // Public authentication routes
 Route::post('/v1/register', [AuthController::class, 'register']);
 Route::post('/v1/login', [AuthController::class, 'login']);
+// Public telemetry route for ESP32 hardware
+Route::post('/v1/sensor-readings', [SensorDataController::class, 'store']);
 
 // Protected Routes (Requires Bearer Token)
 Route::middleware('auth:sanctum')->group(function () {
