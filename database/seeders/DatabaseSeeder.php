@@ -28,8 +28,6 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        $this->call(DrainageSeeder::class);
-
         // Keep the daily-only history view populated immediately after seeding.
         Artisan::call('sensors:aggregate', ['--scope' => 'daily']);
     }
