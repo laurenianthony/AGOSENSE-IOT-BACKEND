@@ -53,6 +53,26 @@ In order to ensure that the Laravel community is welcoming to all, please review
 
 If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
 
+## PostgreSQL backup and restore
+
+Set `DB_CONNECTION=pgsql` and configure `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` in `.env`. For Supabase, use the database connection details from the project dashboard. The Artisan commands use Laravel's resolved PostgreSQL configuration; credentials are not embedded in the commands or passed as command-line arguments.
+
+Install the PostgreSQL client tools (`pg_dump` and `psql`) and make sure both executables are available on `PATH`. Then run:
+
+```powershell
+php artisan db:backup
+```
+
+This writes a plain SQL backup to `database/backups/backup.sql`. The generated backup is git-ignored because it can contain private application data.
+
+To prove the restore without overwriting a database you care about, first configure the application to use a disposable PostgreSQL database with the same schema, then run:
+
+```powershell
+php artisan db:restore
+```
+
+Confirm the prompt. The restore uses the backup's `DROP` statements, runs in one transaction, and stops on the first SQL error. Use `php artisan db:restore --force` only in controlled automation where the target database is known to be disposable. Verify the restored records and schema in the target database before considering the restore proven. Never test restoration against production data.
+
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

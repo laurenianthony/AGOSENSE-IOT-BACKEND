@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
                 'name' => 'Admin Official',
                 'password' => bcrypt('Laurenanthony_11'),
                 'role' => 'admin',
+                'is_approved' => true,
             ]
         );
 

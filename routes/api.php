@@ -27,7 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/v1/reports', [FieldReportController::class, 'index']);
     Route::post('/v1/reports', [FieldReportController::class, 'store']);
 
-    // Role-protected routes for your capstone defense requirements
+    // Role-protected routes 
     Route::middleware('role:admin')->group(function () {
         Route::get('/admin/pending-users', [AdminController::class, 'pendingUsers']);
         Route::post('/admin/approve-user/{id}', [AdminController::class, 'approveUser']);
