@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('sensor_readings', function (Blueprint $table) {
     $table->id();
     $table->foreignId('station_id')->constrained('stations')->onDelete('cascade');
-    $table->float('water_level_cm');
+    $table->float('water_level_cm')->nullable();
     $table->float('flow_rate')->nullable();       
     $table->float('battery_voltage')->nullable(); 
     $table->timestamp('recorded_at')->useCurrent();
